@@ -1,0 +1,6 @@
+{
+  "name": "Panel de Solicitudes OERAAE",
+  "description": "Dashboard institucional de monitoreo y control de notificaciones multicanal (Gmail y WhatsApp WAHA) procesadas en n8n.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
