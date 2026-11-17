@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { X, Settings, Check, RefreshCw, AlertCircle, ExternalLink, Code } from 'lucide-react';
-import { DEFAULT_WEBHOOK_URL, buildHeaders } from '../hooks/useOeraaeData';
+import React, { useState, useEffect } from 'react';
+import { X, Settings, Check, RefreshCw, AlertCircle, ExternalLink, Code, Clock } from 'lucide-react';
+import { DEFAULT_WEBHOOK_URL, OPCIONES_INTERVALO_MS } from '../hooks/useOeraaeData';
 
 interface PanelConfigProps {
   isOpen: boolean;
   onClose: () => void;
   urlActual: string;
   onSaveUrl: (url: string) => void;
+  intervaloActualMs: number;
+  onSaveIntervalo: (ms: number) => void;
 }
 
 export const PanelConfig: React.FC<PanelConfigProps> = ({
@@ -14,13 +16,24 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
   onClose,
   urlActual,
   onSaveUrl,
+  intervaloActualMs,
+  onSaveIntervalo,
 }) => {
   const [urlInput, setUrlInput] = useState(urlActual);
+  const [intervaloInput, setIntervaloInput] = useState<number>(intervaloActualMs);
   const [testStatus, setTestStatus] = useState<{
     tipo: 'idle' | 'testing' | 'success' | 'error';
     mensaje?: string;
   }>({ tipo: 'idle' });
   const [guardadoExitoso, setGuardadoExitoso] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setUrlInput(urlActual);
+      setIntervaloInput(intervaloActualMs);
+      setTestStatus({ tipo: 'idle' });
+    }
+  }, [isOpen, urlActual, intervaloActualMs]);
 
   if (!isOpen) return null;
 
@@ -31,19 +44,21 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
 
     try {
       onSaveUrl(urlLimpia);
+      onSaveIntervalo(intervaloInput);
       setGuardadoExitoso(true);
       setTimeout(() => {
         setGuardadoExitoso(false);
         onClose();
-      }, 1000);
+      }, 900);
     } catch (err) {
       console.error('Error al guardar en localStorage:', err);
-      alert('Ocurrió un error al guardar la URL en el navegador.');
+      alert('Ocurrió un error al guardar la configuración en el navegador.');
     }
   };
 
   const handleRestaurarDefecto = () => {
     setUrlInput(DEFAULT_WEBHOOK_URL);
+    setIntervaloInput(300_000);
     setTestStatus({ tipo: 'idle' });
   };
 
@@ -62,7 +77,10 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
     try {
       const resp = await fetch(url, {
         method: 'GET',
-        headers: buildHeaders(),
+        headers: {
+          Accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
       });
 
       if (resp.ok) {
@@ -87,7 +105,7 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
     } catch (err: unknown) {
       setTestStatus({
         tipo: 'error',
-        mensaje: `No se pudo conectar: ${(err as Error)?.message || 'Error de red o CORS'}. Asegúrate de habilitar CORS en n8n (N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS o cabeceras Access-Control-Allow-Origin: *).`,
+        mensaje: `No se pudo conectar: ${(err as Error)?.message || 'Error de red o CORS'}. Asegúrate de habilitar CORS en n8n (Access-Control-Allow-Origin: *).`,
       });
     }
   };
@@ -110,10 +128,10 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
             </div>
             <div>
               <h3 id="config-title" className="text-base font-bold leading-tight">
-                Configuración del Webhook n8n
+                Configuración del Webhook y Refresco
               </h3>
               <p className="text-xs text-slate-300">
-                Apunta el dashboard al webhook de tu flujo de producción
+                Ajusta el endpoint de n8n y la frecuencia para cuidar tu cuota de ngrok
               </p>
             </div>
           </div>
@@ -128,6 +146,7 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
 
         {/* Formulario */}
         <form onSubmit={handleGuardar} className="p-6 overflow-y-auto space-y-5">
+          {/* URL del Webhook */}
           <div>
             <label htmlFor="url-webhook" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
               URL del Webhook (Método GET):
@@ -135,11 +154,11 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
             <div className="flex items-center gap-2">
               <input
                 id="url-webhook"
-                type="text"
+                type="url"
                 required
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://n8n.tu-servidor.com/webhook/listar-solicitudes"
+                placeholder="https://tu-subdominio.ngrok-free.app/webhook/listar-solicitudes"
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#1E3A5F] focus:border-transparent transition-all shadow-xs"
               />
             </div>
@@ -149,7 +168,7 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
                 onClick={handleRestaurarDefecto}
                 className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2"
               >
-                Restaurar valor predeterminado
+                Restaurar valores predeterminados
               </button>
 
               <button
@@ -166,6 +185,32 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
                 Probar Conexión
               </button>
             </div>
+          </div>
+
+          {/* Frecuencia de Refresco Automático (Anti-bloqueo ngrok) */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+            <label
+              htmlFor="select-intervalo"
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider"
+            >
+              <Clock className="w-3.5 h-3.5 text-[#1E3A5F]" />
+              Intervalo de Refresco Automático y Caché Local:
+            </label>
+            <select
+              id="select-intervalo"
+              value={intervaloInput}
+              onChange={(e) => setIntervaloInput(Number(e.target.value))}
+              className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-md text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-[#1E3A5F] cursor-pointer"
+            >
+              {OPCIONES_INTERVALO_MS.map((op) => (
+                <option key={op.value} value={op.value}>
+                  Cada {op.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Los datos se guardan en caché local (<code className="font-mono">localStorage</code>). Si recargas la página antes de cumplirse este tiempo, se mostrarán al instante sin consumir peticiones de ngrok. Incluye automáticamente la cabecera <code className="font-mono">ngrok-skip-browser-warning: true</code>.
+            </p>
           </div>
 
           {/* Estado de la prueba */}
@@ -196,7 +241,7 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
               <Code className="w-4 h-4 text-slate-500" />
               Estructura JSON esperada desde el nodo "Respond to Webhook":
             </div>
-            <pre className="text-[11px] font-mono bg-slate-900 text-slate-200 p-3 rounded-md overflow-x-auto leading-relaxed max-h-40">
+            <pre className="text-[11px] font-mono bg-slate-900 text-slate-200 p-3 rounded-md overflow-x-auto leading-relaxed max-h-36">
 {`{
   "solicitudes": [
     {
@@ -214,16 +259,7 @@ export const PanelConfig: React.FC<PanelConfigProps> = ({
       "FECHA_ENVIO": "2026-10-12 22:00:35"
     }
   ],
-  "log_errores": [
-    {
-      "FECHA_HORA": "2026-10-12 22:00:41",
-      "NODO_FALLIDO": "Ruta WAHA",
-      "MENSAJE_ERROR": "500 - Error de Puppeteer...",
-      "ALUMNO": "TOMA EDWIN",
-      "CONTACTO_DESTINO": "correo_falso@...",
-      "CANAL": "WHATSAPP"
-    }
-  ]
+  "log_errores": [ ... ]
 }`}
             </pre>
           </div>

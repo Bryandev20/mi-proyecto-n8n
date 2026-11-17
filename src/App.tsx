@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TabActiva, LogError } from './types';
 import { useOeraaeData } from './hooks/useOeraaeData';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { Login } from './components/Login';
 import { Header } from './components/Header';
 import { ErrorBanner } from './components/ErrorBanner';
 import { DashboardView } from './components/DashboardView';
@@ -14,11 +16,62 @@ import { TablaErrores } from './components/TablaErrores';
 import { ModalDetalle } from './components/ModalDetalle';
 import { PanelConfig } from './components/PanelConfig';
 
+const STORAGE_KEY_DEMO_USER = 'oeraae_demo_worker_email';
+
 export default function App() {
+  const [userEmail, setUserEmail] = useState<string | null>(() => {
+    if (!isSupabaseConfigured) {
+      try {
+        return sessionStorage.getItem(STORAGE_KEY_DEMO_USER);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [authChecking, setAuthChecking] = useState<boolean>(isSupabaseConfigured);
+
   const [tabActiva, setTabActiva] = useState<TabActiva>('dashboard');
   const [errorSeleccionado, setErrorSeleccionado] = useState<LogError | null>(null);
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
 
+  // Verificar sesión activa de Supabase y escuchar cambios (login / logout)
+  useEffect(() => {
+    if (!supabase || !isSupabaseConfigured) {
+      setAuthChecking(false);
+      return;
+    }
+
+    let activo = true;
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!activo) return;
+        setUserEmail(session?.user?.email ?? null);
+        setAuthChecking(false);
+      })
+      .catch((err) => {
+        console.error('Error verificando sesión en Supabase:', err);
+        if (activo) setAuthChecking(false);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email ?? null);
+      setAuthChecking(false);
+    });
+
+    return () => {
+      activo = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const isAuthenticated = Boolean(userEmail);
+
+  // Solo consulta datos / activa temporizador si el trabajador está autenticado
   const {
     data,
     loading,
@@ -27,12 +80,55 @@ export default function App() {
     setIsDemoMode,
     urlWebhook,
     saveUrlWebhook,
+    refreshIntervalMs,
+    saveRefreshIntervalMs,
     refetch,
     lastUpdated,
     countdown,
     autoRefreshEnabled,
     setAutoRefreshEnabled,
-  } = useOeraaeData();
+    isFromCache,
+  } = useOeraaeData(isAuthenticated);
+
+  const handleLogout = async () => {
+    if (supabase && isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    } else {
+      try {
+        sessionStorage.removeItem(STORAGE_KEY_DEMO_USER);
+      } catch {
+        // Ignorar errores de almacenamiento
+      }
+    }
+    setUserEmail(null);
+    setTabActiva('dashboard');
+  };
+
+  const handleDemoLogin = (email: string) => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY_DEMO_USER, email);
+    } catch {
+      // Ignorar errores de almacenamiento
+    }
+    setUserEmail(email);
+  };
+
+  // Pantalla de verificación inicial de sesión
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F9] flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-[#1E3A5F]/20 border-t-[#1E3A5F] rounded-full animate-spin mb-3" />
+        <p className="text-xs font-semibold text-slate-600">
+          Verificando sesión institucional...
+        </p>
+      </div>
+    );
+  }
+
+  // Protección de ruta: si no ha iniciado sesión, redirige al Login
+  if (!isAuthenticated || !userEmail) {
+    return <Login onDemoLogin={handleDemoLogin} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] flex flex-col text-slate-800 antialiased selection:bg-[#1E3A5F] selection:text-white">
@@ -51,6 +147,9 @@ export default function App() {
         countdown={countdown}
         autoRefreshEnabled={autoRefreshEnabled}
         onToggleAutoRefresh={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+        userEmail={userEmail}
+        onLogout={handleLogout}
+        isFromCache={isFromCache}
       />
 
       {/* Banner de Error si falla la conexión con n8n */}
@@ -119,12 +218,14 @@ export default function App() {
         onClose={() => setErrorSeleccionado(null)}
       />
 
-      {/* Modal para Configuración de Webhook URL */}
+      {/* Modal para Configuración de Webhook URL e Intervalo de Refresco */}
       <PanelConfig
         isOpen={isConfigOpen}
         onClose={() => setIsConfigOpen(false)}
         urlActual={urlWebhook}
         onSaveUrl={saveUrlWebhook}
+        intervaloActualMs={refreshIntervalMs}
+        onSaveIntervalo={saveRefreshIntervalMs}
       />
     </div>
   );

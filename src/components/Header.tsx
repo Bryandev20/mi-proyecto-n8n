@@ -7,7 +7,9 @@ import {
   AlertOctagon,
   Radio,
   Clock,
-  Sparkles
+  Sparkles,
+  LogOut,
+  UserCheck,
 } from 'lucide-react';
 import { TabActiva } from '../types';
 
@@ -25,6 +27,15 @@ interface HeaderProps {
   countdown: number;
   autoRefreshEnabled: boolean;
   onToggleAutoRefresh: () => void;
+  userEmail: string;
+  onLogout: () => void;
+  isFromCache?: boolean;
+}
+
+function formatearTiempoRestante(segundos: number): string {
+  const mins = Math.floor(segundos / 60);
+  const secs = segundos % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -41,39 +52,51 @@ export const Header: React.FC<HeaderProps> = ({
   countdown,
   autoRefreshEnabled,
   onToggleAutoRefresh,
+  userEmail,
+  onLogout,
+  isFromCache = false,
 }) => {
   return (
     <header className="bg-[#1E3A5F] text-white shadow-md border-b border-[#162C48] sticky top-0 z-40">
       {/* Barra superior de estado institucional y controles */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         {/* Identidad Institucional */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center font-extrabold text-lg text-white shadow-inner tracking-wider">
+          <div className="w-10 h-10 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center font-extrabold text-lg text-white shadow-inner tracking-wider shrink-0">
             OE
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold tracking-tight text-white leading-tight">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-bold tracking-tight text-white leading-tight whitespace-nowrap">
                 Panel de Solicitudes OERAAE
               </h1>
               {isDemoMode && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full shadow-xs">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full shadow-xs shrink-0">
                   <Sparkles className="w-3 h-3" />
                   MODO DEMO
                 </span>
               )}
             </div>
-            <p className="text-xs text-blue-200">
+            <p className="text-xs text-blue-200 truncate">
               Monitoreo y despacho multicanal n8n · Gmail (Email) y WhatsApp (WAHA)
             </p>
           </div>
         </div>
 
-        {/* Controles de Estado, Modo Demo, Auto-refresco y Configuración */}
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
+        {/* Controles de Estado, Usuario Logueado, Refresco, Configuración y Cerrar Sesión */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 text-xs">
+          {/* Correo del usuario logueado */}
+          <div
+            className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/15 text-blue-100 max-w-[210px]"
+            title={`Sesión iniciada como ${userEmail}`}
+          >
+            <UserCheck className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+            <span className="truncate font-medium text-white">{userEmail}</span>
+          </div>
+
           {/* Switch Modo Demo */}
           <div className="flex items-center bg-white/10 hover:bg-white/15 px-2.5 py-1.5 rounded-lg border border-white/15 transition-colors">
-            <label htmlFor="demo-mode-switch" className="flex items-center gap-2 cursor-pointer select-none">
+            <label htmlFor="demo-mode-switch" className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap">
               <span className="text-blue-100 font-medium">Modo Demo</span>
               <input
                 id="demo-mode-switch"
@@ -96,16 +119,21 @@ export const Header: React.FC<HeaderProps> = ({
             </label>
           </div>
 
-          {/* Temporizador / Auto-refresco */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/15 text-blue-100">
+          {/* Temporizador / Auto-refresco (5 min por defecto) */}
+          <div className="hidden sm:flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/15 text-blue-100 whitespace-nowrap">
             <Clock className="w-3.5 h-3.5 text-blue-300" />
             <button
               onClick={onToggleAutoRefresh}
-              title={autoRefreshEnabled ? 'Pausar refresco automático' : 'Activar refresco cada 30s'}
+              title={autoRefreshEnabled ? 'Pausar refresco automático' : 'Activar refresco automático'}
               className="hover:text-white transition-colors cursor-pointer"
             >
               {autoRefreshEnabled ? (
-                <span>Refresco: <span className="font-mono font-bold text-white tabular-nums">{countdown}s</span></span>
+                <span>
+                  Refresco:{' '}
+                  <span className="font-mono font-bold text-white tabular-nums">
+                    {formatearTiempoRestante(countdown)}
+                  </span>
+                </span>
               ) : (
                 <span className="text-amber-200">Pausado</span>
               )}
@@ -116,8 +144,8 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onRefreshManual}
             disabled={isLoading}
-            title="Refrescar datos manualmente ahora"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 disabled:opacity-50 text-white font-medium rounded-lg shadow-xs transition-all border border-blue-400/30"
+            title="Forzar actualización inmediata desde n8n"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 disabled:opacity-50 text-white font-medium rounded-lg shadow-xs transition-all border border-blue-400/30 whitespace-nowrap cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Actualizar</span>
@@ -126,11 +154,22 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Botón de Configuración (Engranaje) */}
           <button
             onClick={onAbrirConfig}
-            title="Configurar URL del Webhook n8n"
-            className="p-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-lg transition-colors border border-white/15"
+            title="Configurar URL del Webhook n8n e intervalo"
+            className="p-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-lg transition-colors border border-white/15 cursor-pointer"
             aria-label="Abrir configuración de webhook"
           >
             <Settings className="w-4 h-4" />
+          </button>
+
+          {/* Botón Cerrar Sesión junto al engranaje */}
+          <button
+            onClick={onLogout}
+            title="Cerrar Sesión"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600/85 hover:bg-red-600 active:scale-95 text-white font-semibold rounded-lg transition-all border border-red-400/40 whitespace-nowrap cursor-pointer"
+            aria-label="Cerrar Sesión"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Cerrar Sesión</span>
           </button>
         </div>
       </div>
@@ -142,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Tab 1: Dashboard */}
             <button
               onClick={() => onCambiarTab('dashboard')}
-              className={`flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                 tabActiva === 'dashboard'
                   ? 'border-blue-400 text-white bg-white/5'
                   : 'border-transparent text-blue-200 hover:text-white hover:bg-white/5'
@@ -155,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Tab 2: Solicitudes */}
             <button
               onClick={() => onCambiarTab('solicitudes')}
-              className={`flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                 tabActiva === 'solicitudes'
                   ? 'border-blue-400 text-white bg-white/5'
                   : 'border-transparent text-blue-200 hover:text-white hover:bg-white/5'
@@ -171,7 +210,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Tab 3: Log de Errores */}
             <button
               onClick={() => onCambiarTab('errores')}
-              className={`flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                 tabActiva === 'errores'
                   ? 'border-red-400 text-white bg-white/5'
                   : 'border-transparent text-blue-200 hover:text-white hover:bg-white/5'
@@ -189,9 +228,9 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Indicador de última sincronización */}
           <div className="hidden lg:flex items-center gap-2 text-xs text-blue-300">
-            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            <Radio className="w-3.5 h-3.5 text-emerald-400" />
             <span>
-              Última sincronización:{' '}
+              {isFromCache ? 'Caché local:' : 'Última sincronización:'}{' '}
               <span className="font-mono text-white tabular-nums">
                 {lastUpdated ? lastUpdated.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
               </span>
